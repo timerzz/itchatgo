@@ -17,14 +17,14 @@ import (
 )
 
 type Client struct {
-	base.Client
+	*base.Client
 	c     chan struct{}
 	stopC chan struct{}
 }
 
 func NewClient(base *base.Client) *Client {
 	return &Client{
-		Client: *base,
+		Client: base,
 		c:      make(chan struct{}),
 		stopC:  make(chan struct{}),
 	}
@@ -41,7 +41,6 @@ func (c *Client) Receive(msgHandler func(*model.WxRecvMsg), errHandler func(erro
 				c.doReceive(msgHandler, errHandler)
 			}
 		}
-		fmt.Println(c.c)
 		c.c <- struct{}{}
 	}()
 	return c.c, c.stopC
@@ -53,6 +52,7 @@ func (c *Client) doReceive(msgHandler func(*model.WxRecvMsg), errHandler func(er
 		errHandler(err)
 		if retcode == 1101 {
 			go func() {
+				c.Logged = false
 				c.stopC <- struct{}{}
 			}()
 		}

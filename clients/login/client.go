@@ -11,6 +11,7 @@ import (
 	"github.com/timerzz/itchatgo/utils"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,67 +19,71 @@ import (
 )
 
 type Client struct {
-	base.Client
-	logging    bool
-	logged     bool
+	*base.Client
 	loginC     chan struct{}
 	loginStopC chan struct{}
 }
 
 func NewClient(base *base.Client) *Client {
 	return &Client{
-		Client:     *base,
+		Client:     base,
 		loginC:     make(chan struct{}),
 		loginStopC: make(chan struct{}),
 	}
 }
 
 func (c *Client) Login(qrHandler func([]byte) error, errHandler func(error)) (loginC, stopC chan struct{}) {
-	go func() {
-		defer func() {
-			c.loginC <- struct{}{}
-		}()
-		c.logging = true
-		uuid, err := c.GetUUID()
-		if err != nil {
-			errHandler(err)
-			return
-		}
-		qr, err := c.GetQR(uuid)
-		if err != nil {
-			errHandler(err)
-			return
-		}
+	if !c.Logging && !c.Logged {
 		go func() {
-			if err = qrHandler(qr); err != nil {
-				errHandler(err)
-				return
-			}
+			c.doLogin(qrHandler, errHandler)
 		}()
-		ticker := time.NewTicker(time.Second * 2)
-		defer ticker.Stop()
-		for ; c.logging; <-ticker.C {
-			select {
-			case <-c.loginStopC:
-				c.logging = false
+	}
+	return c.loginC, c.loginStopC
+}
+
+func (c *Client) doLogin(qrHandler func([]byte) error, errHandler func(error)) {
+	defer func() {
+		c.loginC <- struct{}{}
+	}()
+	c.Logging = true
+	uuid, err := c.GetUUID()
+	if err != nil {
+		errHandler(err)
+		return
+	}
+	qr, err := c.GetQR(uuid)
+	if err != nil {
+		errHandler(err)
+		return
+	}
+	go func() {
+		if err = qrHandler(qr); err != nil {
+			errHandler(err)
+			return
+		}
+	}()
+	ticker := time.NewTicker(time.Second * 2)
+	defer ticker.Stop()
+	for ; c.Logging; <-ticker.C {
+		select {
+		case <-c.loginStopC:
+			c.Logging = false
+			return
+		default:
+			status, _err := c.CheckLogin(uuid)
+			switch status {
+			case 200:
+				_ = c.NotifyStatus()
+				_ = c.InitWX()
+				c.Logging, c.Logged = false, true
 				return
 			default:
-				status, _err := c.CheckLogin(uuid)
-				switch status {
-				case 200:
-					_ = c.NotifyStatus()
-					_ = c.InitWX()
-					c.logging, c.logged = false, true
-					return
-				default:
-					if _err != nil {
-						errHandler(_err)
-					}
+				if _err != nil {
+					errHandler(_err)
 				}
 			}
 		}
-	}()
-	return c.loginC, c.loginStopC
+	}
 }
 
 func (c *Client) GetUUID() (string, error) {
@@ -202,7 +207,6 @@ func (c *Client) ProcessLoginInfo(loginContent string) (err error) {
 }
 
 func (c *Client) NotifyStatus() error {
-	fmt.Println("通知状态变更")
 	urlMap := map[string]string{enum.PassTicket: c.LoginInfo.PassTicket}
 
 	statusNotifyJsonData := make(map[string]interface{}, 5)
@@ -260,7 +264,6 @@ func (c *Client) InitWX() error {
 
 	/* 组装synckey */
 	if initInfo.SyncKeys.Count < 1 {
-		fmt.Println(string(bodyBytes))
 		return errors.New("微信返回的数据有误")
 	}
 	c.LoginInfo.SyncKeys = initInfo.SyncKeys
@@ -269,10 +272,16 @@ func (c *Client) InitWX() error {
 	return nil
 }
 
-func (c *Client) Logging() bool {
-	return c.logging
-}
-
-func (c *Client) Logged() bool {
-	return c.logged
+func (c *Client) Logout() {
+	if c.Logged {
+		url := fmt.Sprintf("%s/webwxlogout", c.LoginInfo.Url)
+		params := map[string]string{
+			"redirect": "1",
+			"type":     "1",
+			"skey":     c.LoginInfo.BaseRequest.SKey,
+		}
+		_, _ = c.HttpClient.Get(url+utils.GetURLParams(params), nil)
+		c.Logged = false
+		c.HttpClient.Jar, _ = cookiejar.New(nil)
+	}
 }
