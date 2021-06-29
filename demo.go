@@ -1,4 +1,4 @@
-package main
+package itchatgo
 
 import (
 	"fmt"
@@ -28,7 +28,6 @@ func main() {
 		fmt.Println(err)
 		fmt.Println(cons)
 	}
-	cs.ContactCtl().GetUserByNickName()
 	start, _ := cs.MsgCtl().Receive(msgHandler, errHandler)
 	<-start
 	fmt.Println(start)

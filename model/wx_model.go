@@ -45,15 +45,16 @@ type ContactList struct {
 
 /* 微信通用User结构，可根据需要扩展 */
 type User struct {
-	Uin        int64            `json:"Uin"`
-	UserName   string           `json:"UserName"`
-	NickName   string           `json:"NickName"`
-	RemarkName string           `json:"RemarkName"`
-	Sex        int8             `json:"Sex"`
-	Province   string           `json:"Province"`
-	City       string           `json:"City"`
-	MemberList []*User          `json:"MemberList"`
-	MemberMap  map[string]*User `json:"-"`
+	Uin             int64            `json:"Uin"`
+	UserName        string           `json:"UserName"`
+	NickName        string           `json:"NickName"`
+	RemarkName      string           `json:"RemarkName"`
+	Sex             int8             `json:"Sex"`
+	Province        string           `json:"Province"`
+	City            string           `json:"City"`
+	MemberList      []*User          `json:"MemberList"`
+	EncryChatRoomId string           `json:"EncryChatRoomId"`
+	MemberMap       map[string]*User `json:"-"`
 }
 
 func (u *User) GenMemberMap() map[string]*User {
@@ -141,4 +142,10 @@ type SendResponse struct {
 type UploadResponse struct {
 	BaseResponse `json:"BaseResponse"`
 	MediaId      string `json:"MediaId"`
+}
+
+type ContactDetailResponse struct {
+	BaseResponse `json:"BaseResponse"`
+	Count        int     `json:"Count"`
+	ContactList  []*User `json:"ContactList"`
 }

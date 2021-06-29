@@ -67,6 +67,26 @@ func (c *Client) GetChatRoomByNickName(nickName string) *model.User {
 	return nil
 }
 
+func (c *Client) SearchChatRoom(name string) (rsp []*model.User) {
+	for _, r := range c.chatRooms {
+		if strings.Contains(r.NickName, name) {
+			rsp = append(rsp, r)
+			continue
+		}
+	}
+	return
+}
+
+func (c *Client) SearchCFriends(name string) (rsp []*model.User) {
+	for _, r := range c.friends {
+		if strings.Contains(r.NickName, name) {
+			rsp = append(rsp, r)
+			continue
+		}
+	}
+	return
+}
+
 func (c *Client) UpdateContacts(contacts ...*model.User) {
 	for _, con := range contacts {
 		if strings.HasPrefix(con.UserName, "@@") {

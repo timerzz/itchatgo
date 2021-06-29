@@ -20,10 +20,10 @@ import(
 - [x] 接收消息
 - [x] 发送文字，图片
 - [x] 获取联系人
-- [ ] 获取群成员详情
+- [x] 获取群成员详情
 - [ ] 发送文件
 - [ ] 发送视频
-
+- [ ] 群、好友变更
 
 ## 接口
 
@@ -89,6 +89,10 @@ clientSet.ContactCtl().GetUserByNickName()
 ```
 ```GetAllContact```会获取所有联系人，好友和群会混在一起。
 
+### 获取群详情
+```go
+clientSet.ContactCtl().GetAllContact()
+```
 
 ## 特别鸣谢
 [itchat4go](https://github.com/newflydd/itchat4go)  

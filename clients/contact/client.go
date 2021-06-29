@@ -70,3 +70,36 @@ func (c *Client) getContact(seq int) (users []*model.User, reSeq int, err error)
 	}
 	return contactList.MemberList, seq, err
 }
+
+type contactDetailRequest struct {
+	UserName        string `json:"UserName"`
+	EncryChatRoomId string `json:"EncryChatRoomId"`
+}
+
+// GetContactDetail
+// 获取联系人详情
+// 获取群的详情主要是获取群内联系人列表
+///**/
+func (c *Client) GetContactDetail(users ...*model.User) (rsp model.ContactDetailResponse, err error) {
+	var list = make([]contactDetailRequest, 0, len(users))
+	for _, u := range users {
+		list = append(list, contactDetailRequest{UserName: u.UserName, EncryChatRoomId: u.EncryChatRoomId})
+	}
+	urlMap := map[string]string{
+		enum.PassTicket: c.LoginInfo.PassTicket,
+		"type":          "ex",
+		enum.R:          fmt.Sprintf("%d", time.Now().UnixNano()/1000000),
+		enum.Lang:       enum.LangValue,
+	}
+
+	params := map[string]interface{}{
+		"BaseRequest": c.LoginInfo.BaseRequest,
+		"Count":       len(users),
+		"List":        list,
+	}
+	err = c.HttpClient.PostJson(c.LoginInfo.Url+enum.WEB_WX_BATCH_GET_CONTACT+utils.GetURLParams(urlMap), params, &rsp)
+	if err != nil {
+		c.UpdateContacts(rsp.ContactList...)
+	}
+	return
+}

@@ -1,4 +1,4 @@
-package main
+package itchatgo
 
 import (
 	"github.com/timerzz/itchatgo/clients/base"

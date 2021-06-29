@@ -15,6 +15,7 @@ const (
 	WEB_WX_SENDIMG_URL        = "/webwxsendmsgimg"
 	WEB_WX_SENDFILE_URL       = "/webwxsendappmsg"
 	WEB_WX_SENDVIDEO_URL      = "/webwxsendvideomsg"
+	WEB_WX_BATCH_GET_CONTACT  = "/webwxbatchgetcontact"               // 批量获取联系人详情
 	WEB_WX_UPDATECHATROOM_URL = API_BASE_URL + "/webwxupdatechatroom" /* 群更新，主要用来邀请好友 */
 
 )
