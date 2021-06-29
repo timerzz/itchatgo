@@ -101,5 +101,7 @@ clientSet.ContactCtl().GetAllContact()
 ## 参考
 [微信网页版接口分析](https://inf.news/zh-hans/tech/6e1e407bcde81fae1b8357f3963d5599.html?__cf_chl_jschl_tk__=6cab055d555c12c5d18115d76c0ec0e65fd16ad6-1624937505-0-AU0rwDgz7Pd0NCVGvFVQp91KhGVjLNUcxDdcPaUDsshTsySQnpySmYnNjzsBEUBSG_gREo8c_cruNVwIpPod80Nh8HfKyY8KGYXelKsDf2iHdSBEbxwf1cxii2bw8J09gGVBeGpZRU0QJA84UQ7naUcc9twcPXhvKGXAMfiVzTpPF68iTd_UsQ2UEFb8swVowfDjc056D3zblJnKGGMGGDau1GmjOmD4G25otOjY9J6woDTFD81H4rfVGuy1IUoiTmDFjskVRKz_YdfAkGLrnEgbSQ5UWkU2Qp_5CAEnZBWvT-Ui0Qlyj5pL8FUByf0rjoJPIL1TzlOUhkoG7KiINt2ThHhj3ktPK0KEkrQ3e1_kKjyQ9P0igSyiL1CoXhUNsuPGk8ooIpjTApdFdQqINuCq7ETrfdfe40-2dwfoGZ3yzhcb-i1fTd7OFi9sHEn4WV7uph5fqiKtTEVtVg3N7x9tCaA0LKHCHjh2I6WtnWrYwTF9D9YwTvy0cMelt-eoGYm3MHWLqQbgzGRjc0zaRd8)
 
-
+## 捐赠
+如果觉得这个项目有所帮助， 可以请我喝杯奶茶  
+![wechatPay](https://imgtu.com/i/RaWeoR)  ![alipay](https://imgtu.com/i/RaW6Ts)
 
