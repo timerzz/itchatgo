@@ -2,6 +2,7 @@ package base
 
 import (
 	"github.com/timerzz/itchatgo/http_client"
+	"github.com/timerzz/itchatgo/http_client/cookiejar"
 	"github.com/timerzz/itchatgo/model"
 	"strings"
 	"sync"
@@ -104,4 +105,13 @@ func (c *Client) UpdateChatRoom(room *model.User) {
 	}
 	room.MemberMap = room.GenMemberMap()
 	c.chatRooms[room.UserName] = room
+}
+
+func (c *Client) Clear() {
+	c.LoginInfo = &model.LoginMap{}
+	c.Logged = false
+	c.Logging = false
+	c.friends = make(map[string]*model.User)
+	c.chatRooms = make(map[string]*model.User)
+	c.HttpClient.Jar, _ = cookiejar.New(nil)
 }

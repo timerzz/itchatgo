@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/timerzz/itchatgo/clients"
 	"github.com/timerzz/itchatgo/model"
 	"io/ioutil"
 )
@@ -22,13 +21,14 @@ func msgHandler(msg *model.WxRecvMsg) {
 }
 
 func main() {
-	cs := clients.NewClientSet()
+	cs := NewClientSet()
 	c, _ := cs.LoginCtl().Login(saveFile, errHandler)
 	<-c
 	if cons, err := cs.ContactCtl().GetAllContact(); err != nil {
 		fmt.Println(err)
 		fmt.Println(cons)
 	}
+	cs.ContactCtl().GetUserByNickName()
 	start, _ := cs.MsgCtl().Receive(msgHandler, errHandler)
 	<-start
 	fmt.Println(start)

@@ -12,7 +12,6 @@ import (
 	"github.com/timerzz/itchatgo/utils"
 	"io/ioutil"
 	"net/http"
-	"net/http/cookiejar"
 	"regexp"
 	"strconv"
 	"strings"
@@ -258,7 +257,7 @@ func (c *Client) InitWX() error {
 	return nil
 }
 
-func (c *Client) Logout() {
+func (c *Client) Logout() (err error) {
 	if c.Logged {
 		url := fmt.Sprintf("%s/webwxlogout", c.LoginInfo.Url)
 		params := map[string]string{
@@ -266,8 +265,11 @@ func (c *Client) Logout() {
 			"type":     "1",
 			"skey":     c.LoginInfo.BaseRequest.SKey,
 		}
-		_, _ = c.HttpClient.Get(url+utils.GetURLParams(params), nil)
-		c.Logged = false
-		c.HttpClient.Jar, _ = cookiejar.New(nil)
+		_, err = c.HttpClient.Get(url+utils.GetURLParams(params), nil)
+		if err != nil {
+			return
+		}
+		c.Clear()
 	}
+	return
 }
