@@ -1,6 +1,8 @@
 package msg
 
 import (
+	"bytes"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,12 +10,19 @@ import (
 	"github.com/timerzz/itchatgo/enum"
 	"github.com/timerzz/itchatgo/model"
 	"github.com/timerzz/itchatgo/utils"
+	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
+)
+
+const (
+	chunkSize = 524288
 )
 
 type Client struct {
@@ -119,70 +128,215 @@ func (c *Client) SyncCheck() (int64, int64, error) {
 }
 
 func (c *Client) WebWxSync() (wxMsges model.WxRecvMsges, err error) {
-	urlMap := map[string]string{}
-	urlMap[enum.Sid] = c.LoginInfo.BaseRequest.Sid
-	urlMap[enum.SKey] = c.LoginInfo.BaseRequest.SKey
-	urlMap[enum.PassTicket] = c.LoginInfo.PassTicket
-
-	webWxSyncJsonData := map[string]interface{}{}
-	webWxSyncJsonData["BaseRequest"] = c.LoginInfo.BaseRequest
-	webWxSyncJsonData["SyncKey"] = c.LoginInfo.SyncKeys
-	webWxSyncJsonData["rr"] = -time.Now().Unix()
-
-	jsonBytes, err := json.Marshal(webWxSyncJsonData)
-	if err != nil {
-		return wxMsges, err
+	urlMap := map[string]string{
+		enum.Sid:        c.LoginInfo.BaseRequest.Sid,
+		enum.SKey:       c.LoginInfo.BaseRequest.SKey,
+		enum.PassTicket: c.LoginInfo.PassTicket,
 	}
 
-	resp, err := http.Post(c.LoginInfo.Url+"/webwxsync"+utils.GetURLParams(urlMap), enum.JSON_HEADER, strings.NewReader(string(jsonBytes)))
-	if err != nil {
-		return wxMsges, err
+	webWxSyncJsonData := map[string]interface{}{
+		"BaseRequest": c.LoginInfo.BaseRequest,
+		"SyncKey":     c.LoginInfo.SyncKeys,
+		"rr":          -time.Now().Unix(),
 	}
-	defer resp.Body.Close()
 
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	err = c.HttpClient.PostJson(c.LoginInfo.Url+enum.WEB_WX_SYNC_URL+utils.GetURLParams(urlMap), webWxSyncJsonData, &wxMsges)
 	if err != nil {
-		return wxMsges, err
-	}
-	/* 解析组装消息对象 */
-	err = json.Unmarshal(bodyBytes, &wxMsges)
-	if err != nil {
-		return wxMsges, err
-	}
-	for _, wx := range wxMsges.MsgList {
-		if wx.MsgType == 1 {
-			var body = string(bodyBytes)
-			fmt.Println(body)
-		}
+		return
 	}
 
 	/* 更新SyncKey */
 	c.LoginInfo.SyncKeys = wxMsges.SyncKeys
 	c.LoginInfo.SyncKeyStr = wxMsges.SyncKeys.ToString()
 
-	return wxMsges, nil
+	return
 }
 
-func (c *Client) SendMsg(wxSendMsg model.WxSendMsg) error {
-	urlMap := map[string]string{}
-	urlMap[enum.Lang] = enum.LangValue
-	urlMap[enum.PassTicket] = c.LoginInfo.PassTicket
-
-	wxSendMsgMap := map[string]interface{}{}
-	wxSendMsgMap[enum.BaseRequest] = c.LoginInfo.BaseRequest
-	wxSendMsgMap["Msg"] = wxSendMsg
-	wxSendMsgMap["Scene"] = 0
-
-	jsonBytes, err := json.Marshal(wxSendMsgMap)
-	if err != nil {
-		return err
+func (c *Client) SendRawMsg(wxSendMsg model.WxSendMsg) (rsp model.SendResponse, err error) {
+	urlMap := map[string]string{
+		enum.Lang:       enum.LangValue,
+		enum.PassTicket: c.LoginInfo.PassTicket,
 	}
-
-	// TODO: 发送微信消息时暂不处理返回值
-	_, err = http.Post(enum.WEB_WX_SENDMSG_URL+utils.GetURLParams(urlMap), enum.JSON_HEADER, strings.NewReader(string(jsonBytes)))
-	if err != nil {
-		return err
+	wxSendMsgMap := map[string]interface{}{
+		enum.BaseRequest: c.LoginInfo.BaseRequest,
+		"Msg":            wxSendMsg,
+		"Scene":          0,
 	}
+	urlPath := enum.WEB_WX_SENDMSG_URL
+	switch wxSendMsg.Type {
+	case 1:
+	case 3:
+		urlPath = enum.WEB_WX_SENDIMG_URL
+		urlMap[enum.Fun], urlMap["f"] = "async", "json"
+	case 6:
+		urlPath = enum.WEB_WX_SENDFILE_URL
+		urlMap[enum.Fun], urlMap["f"] = "async", "json"
+	case 43:
+		urlPath = enum.WEB_WX_SENDVIDEO_URL
+		urlMap[enum.Fun], urlMap["f"] = "async", "json"
+	}
+	err = c.HttpClient.PostJson(c.LoginInfo.Url+urlPath+utils.GetURLParams(urlMap), wxSendMsgMap, &rsp)
+	return
+}
 
-	return nil
+func (c *Client) SendMsg(msg, toUserName string) (rsp model.SendResponse, err error) {
+	if toUserName == "" {
+		toUserName = enum.FileHelper
+	}
+	var id = fmt.Sprintf("%d", time.Now().Unix())
+	return c.SendRawMsg(model.WxSendMsg{
+		Type:         1,
+		Content:      msg,
+		FromUserName: c.LoginInfo.SelfUserName,
+		ToUserName:   toUserName,
+		LocalID:      id,
+		ClientMsgId:  id,
+	})
+}
+
+type fileInfos struct {
+	filePath string
+	fileSize int64
+	fileMD5  string
+	file     *os.File
+}
+
+func (c *Client) UploadFile(filePath, toUserName string, isPic, isVideo bool) (rsp model.UploadResponse, err error) {
+	f, err := prepareFile(filePath)
+	defer f.file.Close()
+	if err != nil {
+		return rsp, err
+	}
+	symbol := "doc"
+	if isPic {
+		symbol = "pic"
+	} else if isVideo {
+		symbol = "video"
+	}
+	uploadMediaRequest := map[string]interface{}{
+		"UploadType":    2,
+		"BaseRequest":   c.LoginInfo.BaseRequest,
+		"ClientMediaId": time.Now().Unix(),
+		"TotalLen":      f.fileSize,
+		"StartPos":      0,
+		"DataLen":       f.fileSize,
+		"MediaType":     4,
+		"FromUserName":  c.LoginInfo.SelfUserName,
+		"ToUserName":    toUserName,
+		"FileMd5":       f.fileMD5,
+	}
+	uploadbyte, err := json.Marshal(&uploadMediaRequest)
+	if err != nil {
+		return rsp, err
+	}
+	chunks := (f.fileSize-1)/chunkSize + 1
+	rsp = model.UploadResponse{BaseResponse: model.BaseResponse{Ret: -1005}}
+	for chunk := int64(1); chunk <= chunks; chunk++ {
+		if rsp, err = c.uploadChunkFile(symbol, f, chunk, chunks, uploadbyte); err != nil {
+			return
+		}
+	}
+	if rsp.Ret != 0 {
+		err = errors.New(fmt.Sprintf("上传文件失败，Ret:%d, ErrMsg:%s", rsp.Ret, rsp.ErrMsg))
+	}
+	return
+}
+
+func (c *Client) uploadChunkFile(symbol string, f fileInfos, chunkNum, chunkTotal int64, uploadMediaRequest []byte) (rsp model.UploadResponse, err error) {
+	fileName := path.Base(f.filePath)
+
+	var body = &bytes.Buffer{}
+	w := multipart.NewWriter(body)
+	defer w.Close()
+	contentType := w.FormDataContentType()
+	var chunk = make([]byte, chunkSize)
+	var n int
+	if n, err = f.file.ReadAt(chunk, (chunkNum-1)*chunkSize); err != nil && err != io.EOF {
+		return
+	}
+	pa, _ := w.CreateFormFile("filename", fileName)
+	if _, err = pa.Write(chunk[:n]); err != nil {
+		return
+	}
+	var cookies = c.HttpClient.Jar.Cookies(nil)
+	var dataTicket = ""
+	for _, cookie := range cookies {
+		if cookie.Name == "webwx_data_ticket" {
+			dataTicket = cookie.Value
+			break
+		}
+	}
+	if dataTicket == "" {
+		err = errors.New("webwx_data_ticket is null")
+		return
+	}
+	for k, v := range map[string]string{
+		"id":                 "WU_FILE_0",
+		"name":               fileName,
+		"type":               "application/octet-stream",
+		"lastModifiedDate":   time.Now().String(),
+		"size":               fmt.Sprintf("%d", f.fileSize),
+		"mediatype":          symbol,
+		"uploadmediarequest": string(uploadMediaRequest),
+		"webwx_data_ticket":  dataTicket,
+		"pass_ticket":        c.LoginInfo.PassTicket,
+	} {
+		w.WriteField(k, v)
+	}
+	if chunkTotal > 1 {
+		w.WriteField("chunk", fmt.Sprintf("%d", chunkNum))
+		w.WriteField("chunks", fmt.Sprintf("%d", chunkTotal))
+	}
+	res, err := c.HttpClient.Post(c.LoginInfo.Url+"/webwxuploadmedia?f=json", body, &http.Header{"Content-Type": []string{contentType}})
+	if err != nil {
+		return
+	}
+	defer res.Body.Close()
+	var b []byte
+	if b, err = ioutil.ReadAll(res.Body); err != nil {
+		return
+	}
+	err = json.Unmarshal(b, &rsp)
+	return
+}
+
+func prepareFile(filePath string) (_file fileInfos, err error) {
+	if _file.file, err = os.Open(filePath); err != nil {
+		return
+	}
+	md5h := md5.New()
+	if _file.fileSize, err = io.Copy(md5h, _file.file); err != nil {
+		return
+	}
+	_file.fileMD5 = fmt.Sprintf("md5:%x", md5h.Sum([]byte{}))
+	_, err = _file.file.Seek(0, 0)
+	return
+}
+
+// SendImage
+// 如果有mediaId，就优先使用mediaId
+// 如果mediaId是空的，就会先上传
+// 如果toUserName 为空， 那么默认会发送给文件助手
+///**
+func (c *Client) SendImage(filePath string, toUserName string, mediaId string) error {
+	if toUserName == "" {
+		toUserName = enum.FileHelper
+	}
+	if mediaId == "" {
+		rsp, err := c.UploadFile(filePath, toUserName, true, false)
+		if err != nil {
+			return err
+		}
+		mediaId = rsp.MediaId
+	}
+	id := fmt.Sprintf("%d", time.Now().Unix())
+	_, err := c.SendRawMsg(model.WxSendMsg{
+		Type:         3,
+		FromUserName: c.LoginInfo.SelfUserName,
+		ToUserName:   toUserName,
+		LocalID:      id,
+		ClientMsgId:  id,
+		MediaId:      mediaId,
+	})
+	return err
 }

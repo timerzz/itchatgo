@@ -16,8 +16,4 @@ var (
 	DefaultHeader = &http.Header{
 		"User-Agent": []string{USER_AGENT},
 	}
-	JsonHeader = &http.Header{
-		"User-Agent":  []string{USER_AGENT},
-		"ContentType": []string{JSON_HEADER},
-	}
 )

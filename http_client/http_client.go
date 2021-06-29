@@ -1,9 +1,13 @@
 package http_client
 
 import (
+	"bytes"
+	"encoding/json"
+	"github.com/timerzz/itchatgo/enum"
+	"github.com/timerzz/itchatgo/http_client/cookiejar"
 	"io"
+	"io/ioutil"
 	"net/http"
-	"net/http/cookiejar"
 )
 
 type Client struct {
@@ -40,4 +44,20 @@ func (c *Client) Post(url string, body io.Reader, header *http.Header) (*http.Re
 		req.Header = *c.header
 	}
 	return c.Do(req)
+}
+
+func (c *Client) PostJson(url string, params, response interface{}) error {
+	body, err := json.Marshal(&params)
+	if err != nil {
+		return err
+	}
+	res, err := http.Post(url, enum.JSON_HEADER, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	if body, err = ioutil.ReadAll(res.Body); err != nil {
+		return err
+	}
+	return json.Unmarshal(body, &response)
 }

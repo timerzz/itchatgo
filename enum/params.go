@@ -22,6 +22,7 @@ const (
 	SelfUserName = "UserName"
 	SelfNickName = "NickName"
 	SyncKeyStr   = "synckeystr"
+	Fun          = "fun"
 
 	Sid         = "sid"
 	Uin         = "uin"
@@ -48,5 +49,6 @@ var (
 	InitParaEnum = map[string]string{
 		R:          "",
 		Lang:       LangValue,
-		PassTicket: ""}
+		PassTicket: "",
+	}
 )

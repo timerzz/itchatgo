@@ -1,6 +1,7 @@
 package login
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -221,7 +222,7 @@ func (c *Client) NotifyStatus() error {
 		return err
 	}
 
-	_, err = http.Post(enum.STATUS_NOTIFY_URL+utils.GetURLParams(urlMap), enum.JSON_HEADER, strings.NewReader(string(jsonBytes)))
+	_, err = http.Post(enum.STATUS_NOTIFY_URL+utils.GetURLParams(urlMap), enum.JSON_HEADER, bytes.NewReader(jsonBytes))
 
 	return err
 }
@@ -234,29 +235,13 @@ func (c *Client) InitWX() error {
 	urlMap[enum.PassTicket] = c.LoginInfo.PassTicket
 
 	/* post数据 */
-	initPostJsonData := map[string]interface{}{}
-	initPostJsonData["BaseRequest"] = c.LoginInfo.BaseRequest
-
-	jsonBytes, err := json.Marshal(initPostJsonData)
+	initPostJsonData := map[string]interface{}{
+		"BaseRequest": c.LoginInfo.BaseRequest,
+	}
+	var initInfo model.InitInfo
+	err := c.HttpClient.PostJson(c.LoginInfo.Url+enum.INIT_URL+utils.GetURLParams(urlMap), initPostJsonData, &initInfo)
 	if err != nil {
 		return err
-	}
-	initUrl := c.LoginInfo.Url + "/webwxinit"
-	resp, err := http.Post(initUrl+utils.GetURLParams(urlMap), enum.JSON_HEADER, strings.NewReader(string(jsonBytes)))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	initInfo := model.InitInfo{}
-	err = json.Unmarshal(bodyBytes, &initInfo)
-	if err != nil {
-		return errors.New("无法解析JSON至InitInfo对象:" + err.Error())
 	}
 
 	c.LoginInfo.SelfNickName = initInfo.User.NickName
@@ -269,6 +254,7 @@ func (c *Client) InitWX() error {
 	c.LoginInfo.SyncKeys = initInfo.SyncKeys
 	c.LoginInfo.SyncKeyStr = initInfo.SyncKeys.ToString()
 
+	c.UpdateContacts(initInfo.ContactList...)
 	return nil
 }
 

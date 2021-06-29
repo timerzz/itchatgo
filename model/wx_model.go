@@ -24,10 +24,16 @@ type BaseRequest struct {
 	DeviceID string `json:"DeviceID"`
 }
 
+type BaseResponse struct {
+	Ret    int    `json:"Ret"`
+	ErrMsg string `json:"ErrMsg"`
+}
+
 /* 微信初始化时返回的大JSON，选择性地提取一些关键数据 */
 type InitInfo struct {
-	User     User             `json:"User"`
-	SyncKeys SyncKeysJsonData `json:"SyncKey"`
+	User        User             `json:"User"`
+	SyncKeys    SyncKeysJsonData `json:"SyncKey"`
+	ContactList []*User          `json:"ContactList"`
 }
 
 /* 微信获取所有联系人列表时返回的大JSON */
@@ -39,13 +45,45 @@ type ContactList struct {
 
 /* 微信通用User结构，可根据需要扩展 */
 type User struct {
-	Uin        int64  `json:"Uin"`
-	UserName   string `json:"UserName"`
-	NickName   string `json:"NickName"`
-	RemarkName string `json:"RemarkName"`
-	Sex        int8   `json:"Sex"`
-	Province   string `json:"Province"`
-	City       string `json:"City"`
+	Uin        int64            `json:"Uin"`
+	UserName   string           `json:"UserName"`
+	NickName   string           `json:"NickName"`
+	RemarkName string           `json:"RemarkName"`
+	Sex        int8             `json:"Sex"`
+	Province   string           `json:"Province"`
+	City       string           `json:"City"`
+	MemberList []*User          `json:"MemberList"`
+	MemberMap  map[string]*User `json:"-"`
+}
+
+func (u *User) GenMemberMap() map[string]*User {
+	var m = make(map[string]*User, len(u.MemberList))
+	for _, mem := range u.MemberList {
+		m[mem.UserName] = mem
+	}
+	return m
+}
+
+func (u *User) GetUserByUname(uname string) *User {
+	if u == nil {
+		return nil
+	}
+	if user, ok := u.MemberMap[uname]; ok {
+		return user
+	}
+	return nil
+}
+
+func (u *User) GetUserByNickName(nickName string) *User {
+	if u == nil {
+		return nil
+	}
+	for _, user := range u.MemberMap {
+		if user.NickName == nickName {
+			return user
+		}
+	}
+	return nil
 }
 
 type SyncKeysJsonData struct {
@@ -90,4 +128,17 @@ type WxSendMsg struct {
 	ToUserName   string `json:"ToUserName"`
 	LocalID      string `json:"LocalID"`
 	ClientMsgId  string `json:"ClientMsgId"`
+	MediaId      string `json:"MediaId,omitempty"`
+	EmojiFlag    int    `json:"EmojiFlag,omitempty"`
+}
+
+type SendResponse struct {
+	BaseResponse `json:"BaseResponse"`
+	MsgID        string `json:"MsgID"`
+	LocalID      string `json:"LocalID"`
+}
+
+type UploadResponse struct {
+	BaseResponse `json:"BaseResponse"`
+	MediaId      string `json:"MediaId"`
 }

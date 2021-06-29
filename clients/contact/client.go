@@ -38,6 +38,7 @@ func (c *Client) GetAllContact() (contactMap map[string]*model.User, err error) 
 		for _, u := range users {
 			contactMap[u.UserName] = u
 		}
+		c.UpdateContacts(users...)
 		if seq == 0 {
 			break
 		}
@@ -52,8 +53,7 @@ func (c *Client) getContact(seq int) (users []*model.User, reSeq int, err error)
 	urlMap["seq"] = strconv.Itoa(seq)
 	urlMap[enum.SKey] = c.LoginInfo.BaseRequest.SKey
 
-	url := fmt.Sprintf("%s/webwxgetcontact", c.LoginInfo.Url)
-	resp, err := c.HttpClient.Get(url+utils.GetURLParams(urlMap), nil)
+	resp, err := c.HttpClient.Get(c.LoginInfo.Url+enum.GET_ALL_CONTACT_URL+utils.GetURLParams(urlMap), nil)
 	if err != nil {
 		return nil, 0, err
 	}
