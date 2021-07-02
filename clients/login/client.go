@@ -245,6 +245,7 @@ func (c *Client) InitWX() error {
 
 	c.LoginInfo.SelfNickName = initInfo.User.NickName
 	c.LoginInfo.SelfUserName = initInfo.User.UserName
+	c.Self = initInfo.User
 
 	/* 组装synckey */
 	if initInfo.SyncKeys.Count < 1 {

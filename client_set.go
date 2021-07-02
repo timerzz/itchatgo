@@ -14,6 +14,7 @@ type ClientSet struct {
 	msgCtl     *msg.Client
 	loginCtl   *login.Client
 	contactCtl *contact.Client
+	base       *base.Client
 }
 
 func NewClientSet() *ClientSet {
@@ -22,6 +23,7 @@ func NewClientSet() *ClientSet {
 		msgCtl:     msg.NewClient(baseClt),
 		loginCtl:   login.NewClient(baseClt),
 		contactCtl: contact.NewClient(baseClt),
+		base:       baseClt,
 	}
 	return cs
 }
@@ -36,4 +38,11 @@ func (cs *ClientSet) MsgCtl() *msg.Client {
 
 func (cs *ClientSet) ContactCtl() *contact.Client {
 	return cs.contactCtl
+}
+
+func (cs *ClientSet) Self() (u model.User) {
+	if cs != nil && cs.base != nil {
+		u = cs.base.Self
+	}
+	return
 }

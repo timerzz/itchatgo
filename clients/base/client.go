@@ -11,6 +11,7 @@ import (
 type Client struct {
 	HttpClient  *http_client.Client
 	LoginInfo   *model.LoginMap
+	Self        model.User
 	Logging     bool
 	Logged      bool
 	friends     map[string]*model.User
