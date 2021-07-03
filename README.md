@@ -111,7 +111,7 @@ clientSet.ContactCtl().GetHeadImgByUser(User,filePath)
 **需要注意的是，这样个方法获取的头像大小不一样，GetHeadImg获取的图大，GetHeadImgByUser获取的图小**
 ### 获取群详情
 ```go
-clientSet.ContactCtl().GetAllContact()
+clientSet.ContactCtl().GetContactDetail()
 ```
 
 ## 特别鸣谢

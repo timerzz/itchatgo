@@ -79,6 +79,7 @@ type contactDetailRequest struct {
 // GetContactDetail
 // 获取联系人详情
 // 获取群的详情主要是获取群内联系人列表
+// 主要需要Username字段
 ///**/
 func (c *Client) GetContactDetail(users ...*model.User) (rsp model.ContactDetailResponse, err error) {
 	var list = make([]contactDetailRequest, 0, len(users))
