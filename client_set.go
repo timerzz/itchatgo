@@ -40,9 +40,9 @@ func (cs *ClientSet) ContactCtl() *contact.Client {
 	return cs.contactCtl
 }
 
-func (cs *ClientSet) Self() (u model.User) {
+func (cs *ClientSet) Self() (u *model.User) {
 	if cs != nil && cs.base != nil {
-		u = cs.base.Self
+		u = &cs.base.Self
 	}
 	return
 }

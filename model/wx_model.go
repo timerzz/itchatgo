@@ -49,6 +49,7 @@ type User struct {
 	UserName        string           `json:"UserName"`
 	NickName        string           `json:"NickName"`
 	RemarkName      string           `json:"RemarkName"`
+	HeadImgUrl      string           `json:"HeadImgUrl"`
 	Sex             int8             `json:"Sex"`
 	Province        string           `json:"Province"`
 	City            string           `json:"City"`

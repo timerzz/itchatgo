@@ -103,3 +103,76 @@ func (c *Client) GetContactDetail(users ...*model.User) (rsp model.ContactDetail
 	}
 	return
 }
+
+//如果有username而没有chatRoomUname， 就是获取用户的头像
+//如果没有username而有chatRoomUname， 就是获取群的头像
+//如果两个都有，就是获取群中某个用户的头像
+//如果有picPath, 还会把头像保存到这个路径
+func (c *Client) GetHeadImg(username, chatRoomUname, picPath string) (pic []byte, err error) {
+	var uname = ""
+	if username != "" {
+		uname = username
+	} else if chatRoomUname != "" {
+		uname = chatRoomUname
+	} else {
+		uname = c.LoginInfo.SelfUserName
+	}
+
+	var params = map[string]string{
+		"userName": uname,
+		"skey":     c.LoginInfo.BaseRequest.SKey,
+		"type":     "big",
+	}
+	var url = c.LoginInfo.Url + enum.WEB_WX_GETICON
+	if username == "" && chatRoomUname != "" {
+		url = c.LoginInfo.Url + enum.WEB_WX_HEADIMG
+	}
+	if chatRoomUname != "" && username != "" {
+		chatRoom := c.GetChatRoomByUname(chatRoomUname)
+		if chatRoom != nil {
+			if chatRoom.EncryChatRoomId != "" {
+				params["chatroomid"] = chatRoom.EncryChatRoomId
+			} else {
+				params["chatroomid"] = chatRoomUname
+			}
+		}
+	}
+
+	rsp, err := c.HttpClient.Get(url+utils.GetURLParams(params), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer rsp.Body.Close()
+	if pic, err = ioutil.ReadAll(rsp.Body); err != nil {
+		return
+	}
+	if picPath != "" {
+		err = ioutil.WriteFile(picPath, pic, 0644)
+	}
+	return
+}
+
+func (c *Client) GetHeadImgByUser(user *model.User, picPath string) (pic []byte, err error) {
+	if user == nil {
+		return nil, errors.New("user is nil")
+	}
+	if user.HeadImgUrl != "" {
+		rsp, _err := c.HttpClient.Get("https://wx.qq.com"+user.HeadImgUrl, nil)
+		if _err != nil {
+			return nil, _err
+		}
+
+		defer rsp.Body.Close()
+		if pic, err = ioutil.ReadAll(rsp.Body); err != nil {
+			return
+		}
+		if picPath != "" {
+			err = ioutil.WriteFile(picPath, pic, 0644)
+		}
+		return
+	}
+	if user.UserName != "" {
+		return c.GetHeadImg(user.UserName, "", picPath)
+	}
+	return nil, errors.New("user has no HeadImgUrl or UserName")
+}

@@ -21,9 +21,13 @@ import(
 - [x] 发送文字，图片
 - [x] 获取联系人
 - [x] 获取群成员详情
+- [x] 获取头像  
 - [ ] 发送文件
 - [ ] 发送视频
 - [ ] 群、好友变更
+- [ ] 创建群聊
+- [ ] 邀请入群  
+- [ ] 撤回消息
 
 ## 接口
 
@@ -89,6 +93,22 @@ clientSet.ContactCtl().GetUserByNickName()
 ```
 ```GetAllContact```会获取所有联系人，好友和群会混在一起。
 
+### 获取头像
+```go
+clientSet.ContactCtl().GetHeadImg(userName, chatRoomName,filePath) 
+clientSet.ContactCtl().GetHeadImgByUser(User,filePath)
+```
+获取头像提供了两个方法。  
+```GetHeadImg```接收三个参数：userName, chatRoomUserName, filePath。  
+```如果有username而没有chatRoomUname， 就是获取用户的头像   
+如果没有username而有chatRoomUname， 就是获取群的头像   
+如果两个都有，就是获取群中某个用户的头像   
+如果有picPath, 还会把头像保存到filePath路径
+返回值是头像的[]byte和error
+```
+另一个方法是```GetHeadImgByUser(User,filePath)```, 可以直接传入model.User对象，这个方法
+会使用User中的HedImgUrl字段去获取头像。  
+**需要注意的是，这样个方法获取的头像大小不一样，GetHeadImg获取的图大，GetHeadImgByUser获取的图小**
 ### 获取群详情
 ```go
 clientSet.ContactCtl().GetAllContact()
