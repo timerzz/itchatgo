@@ -42,7 +42,7 @@ import(
 
 func func main() {
     clientSet := itchatgo.NewClientSet()
-	uuidInfo, err := cs.LoginCtl().Login()
+	uuidInfo, err := cs.LoginCtl().SetTimeout(3 * time.Minute).Login()
 	if err != nil{
 	    fmt.Println(err)
 	    return
@@ -59,8 +59,9 @@ func func main() {
 登录是```LoginCtl```的```Login```函数，函数返回uuidInfo和error。其中uuidInfo包含uuid、二维码图片
 的[]byte以及二维码url。可以通过类似github.com/qianlnk/qrcode的库直接通过uuidInfo中的QrUrl生成二维码。  
 
-除此之外，还可以通过SetLoggedCall和SetLogoutCall用来设置登录成功和退出登录的回调函数。
+除此之外，还可以通过SetLoggedCall和SetLogoutCall用来设置登录成功和退出登录的回调函数。   
 
+登录有默认的超时时间是10min，超过10min就不再轮询。这个超时时间可以通过SetTimeout设置
 ### 更新二维码
 ```go
 	cs.LoginCtl().ReLoadUUid()

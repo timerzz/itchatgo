@@ -28,6 +28,7 @@ type Client struct {
 	loginStopC chan struct{}
 	loggedCall func() //登录成功的回调函数
 	logoutCall func() //退出登录的回调函数
+	timeout    time.Duration
 }
 
 func NewClient(base *base.Client, contact *contact.Client) *Client {
@@ -36,6 +37,7 @@ func NewClient(base *base.Client, contact *contact.Client) *Client {
 		contactCtl: contact,
 		loginC:     make(chan struct{}),
 		loginStopC: make(chan struct{}),
+		timeout:    time.Minute * 10,
 	}
 }
 
@@ -50,6 +52,12 @@ func (c *Client) Login() (info *model.UUidInfo, err error) {
 		go c.waitLogin()
 	}
 	return
+}
+
+//登录的超时时间
+func (c *Client) SetTimeout(t time.Duration) *Client {
+	c.timeout = t
+	return c
 }
 
 func (c *Client) ReLoadUUid() (err error) {
@@ -85,9 +93,13 @@ func (c *Client) waitLogin() {
 	}()
 	ticker := time.NewTicker(time.Second * 2)
 	defer ticker.Stop()
+	timer := time.NewTimer(c.timeout)
 	for ; c.Logging(); <-ticker.C {
 		select {
 		case <-c.loginStopC:
+			c.SetLogging(false)
+			return
+		case <-timer.C:
 			c.SetLogging(false)
 			return
 		default:

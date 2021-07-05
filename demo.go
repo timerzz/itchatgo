@@ -5,12 +5,13 @@ import (
 	"github.com/qianlnk/qrcode"
 	"github.com/timerzz/itchatgo/model"
 	"strings"
+	"time"
 )
 
 func main() {
 	cs := NewClientSet()
 	//登录并获得登录的QR相关信息
-	uuidInfo, err := cs.LoginCtl().Login()
+	uuidInfo, err := cs.LoginCtl().SetTimeout(3 * time.Minute).Login()
 	if err != nil {
 		fmt.Println(err)
 		return
