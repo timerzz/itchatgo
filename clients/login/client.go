@@ -23,8 +23,11 @@ type Client struct {
 	*base.Client
 	contactCtl *contact.Client
 	self       *model.User
+	uuidInfo   *model.UUidInfo
 	loginC     chan struct{}
 	loginStopC chan struct{}
+	loggedCall func() //登录成功的回调函数
+	logoutCall func() //退出登录的回调函数
 }
 
 func NewClient(base *base.Client, contact *contact.Client) *Client {
@@ -36,35 +39,49 @@ func NewClient(base *base.Client, contact *contact.Client) *Client {
 	}
 }
 
-func (c *Client) Login(qrHandler func([]byte) error, errHandler func(error)) (loginC, stopC chan struct{}) {
-	if !c.Logging() && !c.Logged() {
-		go func() {
-			c.doLogin(qrHandler, errHandler)
-		}()
+func (c *Client) Login() (info *model.UUidInfo, err error) {
+	if c.uuidInfo != nil {
+		info = c.uuidInfo
 	}
-	return c.loginC, c.loginStopC
+	if !c.Logging() && !c.Logged() {
+		c.SetLogging(true)
+		err = c.ReLoadUUid()
+		info = c.uuidInfo
+		go c.waitLogin()
+	}
+	return
 }
 
-func (c *Client) doLogin(qrHandler func([]byte) error, errHandler func(error)) {
+func (c *Client) ReLoadUUid() (err error) {
+	c.uuidInfo = &model.UUidInfo{}
+	c.uuidInfo.UUid, err = c.GetUUID()
+	if err != nil {
+		return
+	}
+	c.uuidInfo.QrUrl = enum.QRCODE + c.uuidInfo.UUid
+	c.uuidInfo.QrImg, err = c.GetQR(c.uuidInfo.UUid)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (c *Client) WaitLogin() {
+	if !c.Logged() && c.Logging() {
+		<-c.loginC
+	}
+	return
+}
+
+func (c *Client) StopLogin() {
+	if !c.Logged() && c.Logging() {
+		c.loginStopC <- struct{}{}
+	}
+}
+
+func (c *Client) waitLogin() {
 	defer func() {
 		c.loginC <- struct{}{}
-	}()
-	c.SetLogging(true)
-	uuid, err := c.GetUUID()
-	if err != nil {
-		errHandler(err)
-		return
-	}
-	qr, err := c.GetQR(uuid)
-	if err != nil {
-		errHandler(err)
-		return
-	}
-	go func() {
-		if err = qrHandler(qr); err != nil {
-			errHandler(err)
-			return
-		}
 	}()
 	ticker := time.NewTicker(time.Second * 2)
 	defer ticker.Stop()
@@ -74,17 +91,20 @@ func (c *Client) doLogin(qrHandler func([]byte) error, errHandler func(error)) {
 			c.SetLogging(false)
 			return
 		default:
-			status, _err := c.CheckLogin(uuid)
+			status, _err := c.CheckLogin(c.uuidInfo.UUid)
 			switch status {
 			case 200:
 				_ = c.NotifyStatus()
 				_ = c.InitWX()
 				c.SetLogging(false)
 				c.SetLogged(true)
+				if c.loggedCall != nil {
+					c.loggedCall()
+				}
 				return
 			default:
 				if _err != nil {
-					errHandler(_err)
+					fmt.Println(_err)
 				}
 			}
 		}
@@ -269,6 +289,18 @@ func (c *Client) InitWX() error {
 	return nil
 }
 
+//设置登录成功时的回调
+func (c *Client) SetLoggedCall(f func()) *Client {
+	c.loggedCall = f
+	return c
+}
+
+//设置退出登陆的回调
+func (c *Client) SetLogoutCall(f func()) *Client {
+	c.logoutCall = f
+	return c
+}
+
 func (c *Client) Logout() (err error) {
 	var loginInfo, httpClient = c.LoginInfo(), c.HttpClient()
 	if c.Logged() {
@@ -282,7 +314,11 @@ func (c *Client) Logout() (err error) {
 		if err != nil {
 			return
 		}
+		c.uuidInfo = nil
 		c.contactCtl.Clear()
+		if c.logoutCall != nil {
+			c.logoutCall()
+		}
 	}
 	return
 }

@@ -41,7 +41,7 @@ func (cs *ClientSet) ContactCtl() *contact.Client {
 }
 
 func (cs *ClientSet) Self() (u *model.User) {
-	if cs != nil && cs.base != nil {
+	if cs != nil && cs.LoginCtl() != nil {
 		u = cs.LoginCtl().Self()
 	}
 	return

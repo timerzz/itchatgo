@@ -26,33 +26,46 @@ const (
 )
 
 type Client struct {
-	base  *base.Client
-	c     chan struct{}
-	stopC chan struct{}
+	base      *base.Client
+	stopC     chan struct{}
+	receiving bool   // 是否正在监听
+	exitCall  func() //退出时的回调
 }
 
 func NewClient(base *base.Client) *Client {
 	return &Client{
 		base:  base,
-		c:     make(chan struct{}),
 		stopC: make(chan struct{}),
 	}
 }
 
-func (c *Client) Receive(msgHandler func(*model.WxRecvMsg), errHandler func(error)) (startC, stopC chan struct{}) {
-	go func() {
-	OUT:
-		for {
-			select {
-			case <-c.stopC:
-				break OUT
-			default:
-				c.doReceive(msgHandler, errHandler)
-			}
+//设置退出时的回调函数
+func (c *Client) SetExitCall(f func()) {
+	c.exitCall = f
+}
+
+func (c *Client) Receive(msgHandler func(*model.WxRecvMsg), errHandler func(error)) {
+	c.receiving = true
+OUT:
+	for {
+		select {
+		case <-c.stopC:
+			c.receiving = false
+			break OUT
+		default:
+			c.doReceive(msgHandler, errHandler)
 		}
-		c.c <- struct{}{}
-	}()
-	return c.c, c.stopC
+	}
+	if c.exitCall != nil {
+		c.exitCall()
+	}
+}
+
+//停止监听
+func (c *Client) StopReceive() {
+	if c.receiving {
+		c.stopC <- struct{}{}
+	}
 }
 
 func (c *Client) doReceive(msgHandler func(*model.WxRecvMsg), errHandler func(error)) {

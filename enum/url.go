@@ -1,9 +1,10 @@
 package enum
 
 const (
-	BASE_URL   = "https://login.weixin.qq.com"           /* API基准地址 */
-	UUID_URL   = BASE_URL + "/jslogin"                   /* 获取uuid的地址 */
-	QRCODE_URL = BASE_URL + "/qrcode/"                   /* 获取二维码的地址 */
+	BASE_URL   = "https://login.weixin.qq.com" /* API基准地址 */
+	UUID_URL   = BASE_URL + "/jslogin"         /* 获取uuid的地址 */
+	QRCODE_URL = BASE_URL + "/qrcode/"         /* 获取二维码的地址 */
+	QRCODE     = "https://login.weixin.qq.com/l/"
 	LOGIN_URL  = BASE_URL + "/cgi-bin/mmwebwx-bin/login" /* 登陆URL  */
 
 	API_BASE_URL              = "https://wx.qq.com/cgi-bin/mmwebwx-bin" /* API基准地址 */

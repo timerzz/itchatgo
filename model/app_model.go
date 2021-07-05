@@ -22,6 +22,12 @@ type LoginMap struct {
 	LoginTime int64
 }
 
+type UUidInfo struct {
+	UUid  string `json:"uuid"`
+	QrUrl string `json:"qrUrl"`
+	QrImg []byte `json:"qrImg"`
+}
+
 func (c Cookies) Get(key string) string {
 	for _, cookie := range c {
 		if cookie.Name == key {

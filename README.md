@@ -15,13 +15,16 @@ import(
     "github.com/timerzz/itchatgo"
 )
 ```
+[入门Demo](https://github.com/timerzz/itchatgo/blob/main/demo.go)
+
 ## TODO
 - [x] 登录、登出
 - [x] 接收消息
 - [x] 发送文字，图片
 - [x] 获取联系人
 - [x] 获取群成员详情
-- [x] 获取头像  
+- [x] 获取头像
+- [x] 登录回调，退出登录回调，停止监听回调  
 - [ ] 发送文件
 - [ ] 发送视频
 - [ ] 群、好友变更
@@ -37,47 +40,64 @@ import(
 "github.com/timerzz/itchatgo"
 )
 
-func saveFile(bytes []byte) error {
-    return ioutil.WriteFile("qr.jpg", bytes, 0644)
-}
-
-func errHandler(err error) {
-    fmt.Println(err)
-}
 func func main() {
     clientSet := itchatgo.NewClientSet()
-    loginWaitC, stopC := cs.LoginCtl().Login(saveFile, errHandler)
-    <-loginWaitC
+	uuidInfo, err := cs.LoginCtl().Login()
+	if err != nil{
+	    fmt.Println(err)
+	    return
+	}
+	//设置登录成功和退出登录的回调函数
+	cs.LoginCtl().SetLoggedCall(func() {
+	    fmt.Println("登录成功")
+	})
+	cs.LoginCtl().SetLogoutCall(func() {
+	    fmt.Println("退出登录")
+	})
 }
 ```
-登录是```LoginCtl```的```Login```函数，函数的第一个参数用于处理登录时的二维码，这里用了
-```saveFile```将二维码保存到本地。你也可以自己编写处理函数，比如将二维码发送给前端，在前端显示。```Login```的第二个函数用于处理登录过程中的错误。
-登录返回的两个函数一个用于等待登录完成，一个用于停止登录。
-```golang
-stopC <- struct{}{}
-```
-像这样可以停止登录过程。可以配合超时使用。
+登录是```LoginCtl```的```Login```函数，函数返回uuidInfo和error。其中uuidInfo包含uuid、二维码图片
+的[]byte以及二维码url。可以通过类似github.com/qianlnk/qrcode的库直接通过uuidInfo中的QrUrl生成二维码。  
 
+除此之外，还可以通过SetLoggedCall和SetLogoutCall用来设置登录成功和退出登录的回调函数。
+
+### 更新二维码
+```go
+	cs.LoginCtl().ReLoadUUid()
+```
+
+### 停止登录
+```go
+	cs.LoginCtl().StopLogin()
+```
+在登录成功前，如果不停止登录，会一直轮询有没有登录成功
 ### 退出登录
 ```go
 clientSet.LoginCtl().Logout()
 ```
 ### 接收消息
 ```go
-func msgHandler(msg *model.WxRecvMsg) {
-    if msg.MsgType == 1 {
-    fmt.Println(msg.FromUserName + ":  " + msg.Content)
+var msgHandler = func(msg *model.WxRecvMsg) {
+    if strings.Contains(msg.Content, "exit"){
+        cs.LoginCtl().Logout()
+    }else{
+        fmt.Println(msg.Content)
     }
 }
-...
-start, _ := clientSet.MsgCtl().Receive(msgHandler, errHandler)
-<-start
+
+//错误处理函数
+var errHandler = func(err error) {
+    fmt.Println(err)
+}
+
+//开始监听
+cs.MsgCtl().Receive(msgHandler, errHandler)
 ```
-和登录类似，```Receive```需要传入消息的处理函数和错误处理函数。两个返回值，一个用于等待消息接收完毕（比如手机上退出了登录的微信，Receive就会停止退出，不再轮询），
-还有一个用于停止消息的接收。
+```Receive```需要传入消息的处理函数和错误处理函数
 
 如果你不需要一直进行消息的接收，也可以使用```MsgCtl().WebWxSync()```来接收消息（可以参考Receive的实现）。
 
+也可以通过```SetExitCall```设置退出监听时的回调函数
 
 ### 发送消息
 ```go

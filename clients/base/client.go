@@ -2,7 +2,6 @@ package base
 
 import (
 	"github.com/timerzz/itchatgo/http_client"
-	"github.com/timerzz/itchatgo/http_client/cookiejar"
 	"github.com/timerzz/itchatgo/model"
 )
 
@@ -45,8 +44,6 @@ func NewClient(httpclt *http_client.Client, loginInfo *model.LoginMap) *Client {
 }
 
 func (c *Client) Clear() {
-	c.loginInfo = &model.LoginMap{}
 	c.logged = false
 	c.logging = false
-	c.httpClient.Jar, _ = cookiejar.New(nil)
 }
