@@ -21,10 +21,10 @@ func NewClientSet() *ClientSet {
 	baseClt := base.NewClient(http_client.NewHttpClient(enum.DefaultHeader), &model.LoginMap{})
 	cs := &ClientSet{
 		msgCtl:     msg.NewClient(baseClt),
-		loginCtl:   login.NewClient(baseClt),
 		contactCtl: contact.NewClient(baseClt),
 		base:       baseClt,
 	}
+	cs.loginCtl = login.NewClient(baseClt, cs.contactCtl)
 	return cs
 }
 
@@ -42,7 +42,7 @@ func (cs *ClientSet) ContactCtl() *contact.Client {
 
 func (cs *ClientSet) Self() (u *model.User) {
 	if cs != nil && cs.base != nil {
-		u = &cs.base.Self
+		u = cs.LoginCtl().Self()
 	}
 	return
 }

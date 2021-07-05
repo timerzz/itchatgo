@@ -26,16 +26,16 @@ const (
 )
 
 type Client struct {
-	*base.Client
+	base  *base.Client
 	c     chan struct{}
 	stopC chan struct{}
 }
 
 func NewClient(base *base.Client) *Client {
 	return &Client{
-		Client: base,
-		c:      make(chan struct{}),
-		stopC:  make(chan struct{}),
+		base:  base,
+		c:     make(chan struct{}),
+		stopC: make(chan struct{}),
 	}
 }
 
@@ -61,7 +61,7 @@ func (c *Client) doReceive(msgHandler func(*model.WxRecvMsg), errHandler func(er
 		errHandler(err)
 		if retcode == 1101 {
 			go func() {
-				c.Logged = false
+				c.base.SetLogged(false)
 				c.stopC <- struct{}{}
 			}()
 		}
@@ -83,19 +83,20 @@ func (c *Client) doReceive(msgHandler func(*model.WxRecvMsg), errHandler func(er
 }
 
 func (c *Client) SyncCheck() (int64, int64, error) {
+	var loginInfo, httpClient = c.base.LoginInfo(), c.base.HttpClient()
 	timeStamp := fmt.Sprintf("%d", time.Now().UnixNano()/1000000)
 	urlMap := map[string]string{
 		enum.R:         timeStamp,
-		enum.SKey:      c.LoginInfo.BaseRequest.SKey,
-		enum.Sid:       c.LoginInfo.BaseRequest.Sid,
-		enum.Uin:       c.LoginInfo.BaseRequest.Uin,
-		enum.DeviceId:  c.LoginInfo.BaseRequest.DeviceID,
-		enum.SyncKey:   c.LoginInfo.SyncKeyStr,
+		enum.SKey:      loginInfo.BaseRequest.SKey,
+		enum.Sid:       loginInfo.BaseRequest.Sid,
+		enum.Uin:       loginInfo.BaseRequest.Uin,
+		enum.DeviceId:  loginInfo.BaseRequest.DeviceID,
+		enum.SyncKey:   loginInfo.SyncKeyStr,
 		enum.TimeStamp: timeStamp,
 	}
-	c.HttpClient.Timeout = 30 * time.Second
-	syncUrl := fmt.Sprintf("%s/synccheck", c.LoginInfo.SyncUrl)
-	resp, err := c.HttpClient.Get(syncUrl+utils.GetURLParams(urlMap), nil)
+	httpClient.Timeout = 30 * time.Second
+	syncUrl := fmt.Sprintf("%s/synccheck", loginInfo.SyncUrl)
+	resp, err := httpClient.Get(syncUrl+utils.GetURLParams(urlMap), nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -128,37 +129,39 @@ func (c *Client) SyncCheck() (int64, int64, error) {
 }
 
 func (c *Client) WebWxSync() (wxMsges model.WxRecvMsges, err error) {
+	var loginInfo, httpClient = c.base.LoginInfo(), c.base.HttpClient()
 	urlMap := map[string]string{
-		enum.Sid:        c.LoginInfo.BaseRequest.Sid,
-		enum.SKey:       c.LoginInfo.BaseRequest.SKey,
-		enum.PassTicket: c.LoginInfo.PassTicket,
+		enum.Sid:        loginInfo.BaseRequest.Sid,
+		enum.SKey:       loginInfo.BaseRequest.SKey,
+		enum.PassTicket: loginInfo.PassTicket,
 	}
 
 	webWxSyncJsonData := map[string]interface{}{
-		"BaseRequest": c.LoginInfo.BaseRequest,
-		"SyncKey":     c.LoginInfo.SyncKeys,
+		"BaseRequest": loginInfo.BaseRequest,
+		"SyncKey":     loginInfo.SyncKeys,
 		"rr":          -time.Now().Unix(),
 	}
 
-	err = c.HttpClient.PostJson(c.LoginInfo.Url+enum.WEB_WX_SYNC_URL+utils.GetURLParams(urlMap), webWxSyncJsonData, &wxMsges)
+	err = httpClient.PostJson(loginInfo.Url+enum.WEB_WX_SYNC_URL+utils.GetURLParams(urlMap), webWxSyncJsonData, &wxMsges)
 	if err != nil {
 		return
 	}
 
 	/* 更新SyncKey */
-	c.LoginInfo.SyncKeys = wxMsges.SyncKeys
-	c.LoginInfo.SyncKeyStr = wxMsges.SyncKeys.ToString()
+	loginInfo.SyncKeys = wxMsges.SyncKeys
+	loginInfo.SyncKeyStr = wxMsges.SyncKeys.ToString()
 
 	return
 }
 
 func (c *Client) SendRawMsg(wxSendMsg model.WxSendMsg) (rsp model.SendResponse, err error) {
+	var loginInfo, httpClient = c.base.LoginInfo(), c.base.HttpClient()
 	urlMap := map[string]string{
 		enum.Lang:       enum.LangValue,
-		enum.PassTicket: c.LoginInfo.PassTicket,
+		enum.PassTicket: loginInfo.PassTicket,
 	}
 	wxSendMsgMap := map[string]interface{}{
-		enum.BaseRequest: c.LoginInfo.BaseRequest,
+		enum.BaseRequest: loginInfo.BaseRequest,
 		"Msg":            wxSendMsg,
 		"Scene":          0,
 	}
@@ -175,11 +178,12 @@ func (c *Client) SendRawMsg(wxSendMsg model.WxSendMsg) (rsp model.SendResponse, 
 		urlPath = enum.WEB_WX_SENDVIDEO_URL
 		urlMap[enum.Fun], urlMap["f"] = "async", "json"
 	}
-	err = c.HttpClient.PostJson(c.LoginInfo.Url+urlPath+utils.GetURLParams(urlMap), wxSendMsgMap, &rsp)
+	err = httpClient.PostJson(loginInfo.Url+urlPath+utils.GetURLParams(urlMap), wxSendMsgMap, &rsp)
 	return
 }
 
 func (c *Client) SendMsg(msg, toUserName string) (rsp model.SendResponse, err error) {
+	var loginInfo = c.base.LoginInfo()
 	if toUserName == "" {
 		toUserName = enum.FileHelper
 	}
@@ -187,7 +191,7 @@ func (c *Client) SendMsg(msg, toUserName string) (rsp model.SendResponse, err er
 	return c.SendRawMsg(model.WxSendMsg{
 		Type:         1,
 		Content:      msg,
-		FromUserName: c.LoginInfo.SelfUserName,
+		FromUserName: loginInfo.SelfUserName,
 		ToUserName:   toUserName,
 		LocalID:      id,
 		ClientMsgId:  id,
@@ -202,6 +206,7 @@ type fileInfos struct {
 }
 
 func (c *Client) UploadFile(filePath, toUserName string, isPic, isVideo bool) (rsp model.UploadResponse, err error) {
+	var loginInfo = c.base.LoginInfo()
 	f, err := prepareFile(filePath)
 	defer f.file.Close()
 	if err != nil {
@@ -215,13 +220,13 @@ func (c *Client) UploadFile(filePath, toUserName string, isPic, isVideo bool) (r
 	}
 	uploadMediaRequest := map[string]interface{}{
 		"UploadType":    2,
-		"BaseRequest":   c.LoginInfo.BaseRequest,
+		"BaseRequest":   loginInfo.BaseRequest,
 		"ClientMediaId": time.Now().Unix(),
 		"TotalLen":      f.fileSize,
 		"StartPos":      0,
 		"DataLen":       f.fileSize,
 		"MediaType":     4,
-		"FromUserName":  c.LoginInfo.SelfUserName,
+		"FromUserName":  loginInfo.SelfUserName,
 		"ToUserName":    toUserName,
 		"FileMd5":       f.fileMD5,
 	}
@@ -243,6 +248,8 @@ func (c *Client) UploadFile(filePath, toUserName string, isPic, isVideo bool) (r
 }
 
 func (c *Client) uploadChunkFile(symbol string, f fileInfos, chunkNum, chunkTotal int64, uploadMediaRequest []byte) (rsp model.UploadResponse, err error) {
+	var loginInfo, httpClient = c.base.LoginInfo(), c.base.HttpClient()
+
 	fileName := path.Base(f.filePath)
 
 	var body = &bytes.Buffer{}
@@ -258,7 +265,7 @@ func (c *Client) uploadChunkFile(symbol string, f fileInfos, chunkNum, chunkTota
 	if _, err = pa.Write(chunk[:n]); err != nil {
 		return
 	}
-	var cookies = c.HttpClient.Jar.Cookies(nil)
+	var cookies = httpClient.Jar.Cookies(nil)
 	var dataTicket = ""
 	for _, cookie := range cookies {
 		if cookie.Name == "webwx_data_ticket" {
@@ -279,7 +286,7 @@ func (c *Client) uploadChunkFile(symbol string, f fileInfos, chunkNum, chunkTota
 		"mediatype":          symbol,
 		"uploadmediarequest": string(uploadMediaRequest),
 		"webwx_data_ticket":  dataTicket,
-		"pass_ticket":        c.LoginInfo.PassTicket,
+		"pass_ticket":        loginInfo.PassTicket,
 	} {
 		w.WriteField(k, v)
 	}
@@ -287,7 +294,7 @@ func (c *Client) uploadChunkFile(symbol string, f fileInfos, chunkNum, chunkTota
 		w.WriteField("chunk", fmt.Sprintf("%d", chunkNum))
 		w.WriteField("chunks", fmt.Sprintf("%d", chunkTotal))
 	}
-	res, err := c.HttpClient.Post(c.LoginInfo.Url+"/webwxuploadmedia?f=json", body, &http.Header{"Content-Type": []string{contentType}})
+	res, err := httpClient.Post(loginInfo.Url+"/webwxuploadmedia?f=json", body, &http.Header{"Content-Type": []string{contentType}})
 	if err != nil {
 		return
 	}
@@ -319,6 +326,8 @@ func prepareFile(filePath string) (_file fileInfos, err error) {
 // 如果toUserName 为空， 那么默认会发送给文件助手
 ///**
 func (c *Client) SendImage(filePath string, toUserName string, mediaId string) error {
+	var loginInfo = c.base.LoginInfo()
+
 	if toUserName == "" {
 		toUserName = enum.FileHelper
 	}
@@ -332,7 +341,7 @@ func (c *Client) SendImage(filePath string, toUserName string, mediaId string) e
 	id := fmt.Sprintf("%d", time.Now().Unix())
 	_, err := c.SendRawMsg(model.WxSendMsg{
 		Type:         3,
-		FromUserName: c.LoginInfo.SelfUserName,
+		FromUserName: loginInfo.SelfUserName,
 		ToUserName:   toUserName,
 		LocalID:      id,
 		ClientMsgId:  id,

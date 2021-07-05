@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/timerzz/itchatgo/clients/base"
+	"github.com/timerzz/itchatgo/clients/contact"
 	"github.com/timerzz/itchatgo/enum"
 	"github.com/timerzz/itchatgo/model"
 	"github.com/timerzz/itchatgo/utils"
@@ -20,20 +21,23 @@ import (
 
 type Client struct {
 	*base.Client
+	contactCtl *contact.Client
+	self       *model.User
 	loginC     chan struct{}
 	loginStopC chan struct{}
 }
 
-func NewClient(base *base.Client) *Client {
+func NewClient(base *base.Client, contact *contact.Client) *Client {
 	return &Client{
 		Client:     base,
+		contactCtl: contact,
 		loginC:     make(chan struct{}),
 		loginStopC: make(chan struct{}),
 	}
 }
 
 func (c *Client) Login(qrHandler func([]byte) error, errHandler func(error)) (loginC, stopC chan struct{}) {
-	if !c.Logging && !c.Logged {
+	if !c.Logging() && !c.Logged() {
 		go func() {
 			c.doLogin(qrHandler, errHandler)
 		}()
@@ -45,7 +49,7 @@ func (c *Client) doLogin(qrHandler func([]byte) error, errHandler func(error)) {
 	defer func() {
 		c.loginC <- struct{}{}
 	}()
-	c.Logging = true
+	c.SetLogging(true)
 	uuid, err := c.GetUUID()
 	if err != nil {
 		errHandler(err)
@@ -64,10 +68,10 @@ func (c *Client) doLogin(qrHandler func([]byte) error, errHandler func(error)) {
 	}()
 	ticker := time.NewTicker(time.Second * 2)
 	defer ticker.Stop()
-	for ; c.Logging; <-ticker.C {
+	for ; c.Logging(); <-ticker.C {
 		select {
 		case <-c.loginStopC:
-			c.Logging = false
+			c.SetLogging(false)
 			return
 		default:
 			status, _err := c.CheckLogin(uuid)
@@ -75,7 +79,8 @@ func (c *Client) doLogin(qrHandler func([]byte) error, errHandler func(error)) {
 			case 200:
 				_ = c.NotifyStatus()
 				_ = c.InitWX()
-				c.Logging, c.Logged = false, true
+				c.SetLogging(false)
+				c.SetLogged(true)
 				return
 			default:
 				if _err != nil {
@@ -87,7 +92,9 @@ func (c *Client) doLogin(qrHandler func([]byte) error, errHandler func(error)) {
 }
 
 func (c *Client) GetUUID() (string, error) {
-	resp, err := c.HttpClient.Get(enum.UUID_URL+utils.GetURLParams(enum.UuidParaEnum), nil)
+	var httpClient = c.HttpClient()
+
+	resp, err := httpClient.Get(enum.UUID_URL+utils.GetURLParams(enum.UuidParaEnum), nil)
 	if err != nil {
 		return "", errors.New("Faild to access the WeChat API:" + err.Error())
 	}
@@ -116,7 +123,8 @@ func (c *Client) GetUUID() (string, error) {
 }
 
 func (c *Client) GetQR(uuid string) ([]byte, error) {
-	resp, err := c.HttpClient.Get(enum.QRCODE_URL+uuid, nil)
+	var httpClient = c.HttpClient()
+	resp, err := httpClient.Get(enum.QRCODE_URL+uuid, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -129,13 +137,14 @@ func (c *Client) GetQR(uuid string) ([]byte, error) {
 }
 
 func (c *Client) CheckLogin(uuid string) (int64, error) {
+	var httpClient = c.HttpClient()
 	var timestamp = time.Now().UnixNano() / 1000000
 	paraMap := enum.LoginParaEnum
 	paraMap[enum.UUID] = uuid
 	paraMap[enum.TimeStamp] = fmt.Sprintf("%d", timestamp)
 	paraMap[enum.R] = fmt.Sprintf("%d", ^(int32)(timestamp))
 
-	resp, err := c.HttpClient.Get(enum.LOGIN_URL+utils.GetURLParams(paraMap), nil)
+	resp, err := httpClient.Get(enum.LOGIN_URL+utils.GetURLParams(paraMap), nil)
 	if err != nil {
 		return 0, errors.New("访问微信服务器API失败:" + err.Error())
 	}
@@ -162,25 +171,26 @@ func (c *Client) CheckLogin(uuid string) (int64, error) {
 }
 
 func (c *Client) ProcessLoginInfo(loginContent string) (err error) {
+	var loginInfo, httpClient = c.LoginInfo(), c.HttpClient()
 	reg := regexp.MustCompile(`window.redirect_uri="(\S+)";`)
 	groups := reg.FindStringSubmatch(loginContent)
 	if len(groups) < 1 {
 		return errors.New("process login  regexp match err")
 	}
-	c.LoginInfo.Url = groups[1]
+	loginInfo.Url = groups[1]
 
-	resp, err := c.HttpClient.Get(c.LoginInfo.Url+"&fun=new&version=v2", enum.ProcessLoginHeader)
+	resp, err := httpClient.Get(loginInfo.Url+"&fun=new&version=v2", enum.ProcessLoginHeader)
 	if err != nil {
 		return errors.New("process login request err:" + err.Error())
 	}
-	c.LoginInfo.Url = c.LoginInfo.Url[:strings.LastIndex(c.LoginInfo.Url, "/")]
-	c.LoginInfo.FileUrl, c.LoginInfo.SyncUrl = c.LoginInfo.Url, c.LoginInfo.Url
+	loginInfo.Url = loginInfo.Url[:strings.LastIndex(loginInfo.Url, "/")]
+	loginInfo.FileUrl, loginInfo.SyncUrl = loginInfo.Url, loginInfo.Url
 	for indexUrl, detailUrl := range enum.WxURLs {
-		if strings.Contains(c.LoginInfo.Url, indexUrl) {
+		if strings.Contains(loginInfo.Url, indexUrl) {
 			urls := utils.Map(detailUrl, func(s string) string {
 				return fmt.Sprintf("https://%s/cgi-bin/mmwebwx-bin", s)
 			})
-			c.LoginInfo.FileUrl, c.LoginInfo.SyncUrl = urls[0], urls[1]
+			loginInfo.FileUrl, loginInfo.SyncUrl = urls[0], urls[1]
 			break
 		}
 	}
@@ -194,83 +204,89 @@ func (c *Client) ProcessLoginInfo(loginContent string) (err error) {
 	loginCallbackXMLResult := model.LoginCallbackXMLResult{}
 	err = xml.Unmarshal(bodyBytes, &loginCallbackXMLResult)
 
-	c.LoginInfo.BaseRequest.SKey = loginCallbackXMLResult.SKey
-	c.LoginInfo.BaseRequest.Sid = loginCallbackXMLResult.WXSid
-	c.LoginInfo.BaseRequest.Uin = loginCallbackXMLResult.WXUin
-	c.LoginInfo.BaseRequest.DeviceID = "e" + utils.GetRandomString(10, 15)
+	loginInfo.BaseRequest.SKey = loginCallbackXMLResult.SKey
+	loginInfo.BaseRequest.Sid = loginCallbackXMLResult.WXSid
+	loginInfo.BaseRequest.Uin = loginCallbackXMLResult.WXUin
+	loginInfo.BaseRequest.DeviceID = "e" + utils.GetRandomString(10, 15)
 
-	c.LoginInfo.PassTicket = loginCallbackXMLResult.PassTicket
-	if c.LoginInfo.BaseRequest.SKey == "" && c.LoginInfo.BaseRequest.Sid == "" && c.LoginInfo.BaseRequest.Uin == "" {
+	loginInfo.PassTicket = loginCallbackXMLResult.PassTicket
+	if loginInfo.BaseRequest.SKey == "" && loginInfo.BaseRequest.Sid == "" && loginInfo.BaseRequest.Uin == "" {
 		return errors.New("Your wechat account may be LIMITED to log in WEB wechat")
 	}
 	return nil
 }
 
 func (c *Client) NotifyStatus() error {
-	urlMap := map[string]string{enum.PassTicket: c.LoginInfo.PassTicket}
+	var loginInfo = c.LoginInfo()
+	urlMap := map[string]string{enum.PassTicket: loginInfo.PassTicket}
 
 	statusNotifyJsonData := make(map[string]interface{}, 5)
-	statusNotifyJsonData["BaseRequest"] = c.LoginInfo.BaseRequest
+	statusNotifyJsonData["BaseRequest"] = loginInfo.BaseRequest
 	statusNotifyJsonData["Code"] = 3
-	statusNotifyJsonData["FromUserName"] = c.LoginInfo.SelfUserName
-	statusNotifyJsonData["ToUserName"] = c.LoginInfo.SelfUserName
+	statusNotifyJsonData["FromUserName"] = loginInfo.SelfUserName
+	statusNotifyJsonData["ToUserName"] = loginInfo.SelfUserName
 	statusNotifyJsonData["ClientMsgId"] = time.Now().UnixNano() / 1000000
 
 	jsonBytes, err := json.Marshal(statusNotifyJsonData)
 	if err != nil {
 		return err
 	}
-
 	_, err = http.Post(enum.STATUS_NOTIFY_URL+utils.GetURLParams(urlMap), enum.JSON_HEADER, bytes.NewReader(jsonBytes))
 
 	return err
 }
 
 func (c *Client) InitWX() error {
+	var loginInfo, httpClient = c.LoginInfo(), c.HttpClient()
 	/* post URL */
 	var urlMap = enum.InitParaEnum
 	var timestamp = time.Now().UnixNano() / 1000000
 	urlMap[enum.R] = fmt.Sprintf("%d", ^(int32)(timestamp))
-	urlMap[enum.PassTicket] = c.LoginInfo.PassTicket
+	urlMap[enum.PassTicket] = loginInfo.PassTicket
 
 	/* post数据 */
 	initPostJsonData := map[string]interface{}{
-		"BaseRequest": c.LoginInfo.BaseRequest,
+		"BaseRequest": loginInfo.BaseRequest,
 	}
 	var initInfo model.InitInfo
-	err := c.HttpClient.PostJson(c.LoginInfo.Url+enum.INIT_URL+utils.GetURLParams(urlMap), initPostJsonData, &initInfo)
+	err := httpClient.PostJson(loginInfo.Url+enum.INIT_URL+utils.GetURLParams(urlMap), initPostJsonData, &initInfo)
 	if err != nil {
 		return err
 	}
 
-	c.LoginInfo.SelfNickName = initInfo.User.NickName
-	c.LoginInfo.SelfUserName = initInfo.User.UserName
-	c.Self = initInfo.User
+	loginInfo.SelfNickName = initInfo.User.NickName
+	loginInfo.SelfUserName = initInfo.User.UserName
+	c.self = &initInfo.User
 
 	/* 组装synckey */
 	if initInfo.SyncKeys.Count < 1 {
 		return errors.New("微信返回的数据有误")
 	}
-	c.LoginInfo.SyncKeys = initInfo.SyncKeys
-	c.LoginInfo.SyncKeyStr = initInfo.SyncKeys.ToString()
+	loginInfo.SyncKeys = initInfo.SyncKeys
+	loginInfo.SyncKeyStr = initInfo.SyncKeys.ToString()
 
-	c.UpdateContacts(initInfo.ContactList...)
+	c.contactCtl.UpdateContacts(initInfo.ContactList...)
 	return nil
 }
 
 func (c *Client) Logout() (err error) {
-	if c.Logged {
-		url := fmt.Sprintf("%s/webwxlogout", c.LoginInfo.Url)
+	var loginInfo, httpClient = c.LoginInfo(), c.HttpClient()
+	if c.Logged() {
+		url := fmt.Sprintf("%s/webwxlogout", loginInfo.Url)
 		params := map[string]string{
 			"redirect": "1",
 			"type":     "1",
-			"skey":     c.LoginInfo.BaseRequest.SKey,
+			"skey":     loginInfo.BaseRequest.SKey,
 		}
-		_, err = c.HttpClient.Get(url+utils.GetURLParams(params), nil)
+		_, err = httpClient.Get(url+utils.GetURLParams(params), nil)
 		if err != nil {
 			return
 		}
-		c.Clear()
+		c.contactCtl.Clear()
 	}
 	return
+}
+
+func (c *Client) Self() *model.User {
+	return c.self
 }
