@@ -21,14 +21,15 @@ import (
 
 type Client struct {
 	*base.Client
-	contactCtl *contact.Client
-	self       *model.User
-	uuidInfo   *model.UUidInfo
-	loginC     chan struct{}
-	loginStopC chan struct{}
-	loggedCall func() //登录成功的回调函数
-	logoutCall func() //退出登录的回调函数
-	timeout    time.Duration
+	contactCtl    *contact.Client
+	self          *model.User
+	uuidInfo      *model.UUidInfo
+	loginC        chan struct{}
+	loginStopC    chan struct{}
+	loggedCall    func() //登录成功的回调函数
+	logoutCall    func() //退出登录的回调函数
+	stopLoginCall func() //停止登录的回调
+	timeout       time.Duration
 }
 
 func NewClient(base *base.Client, contact *contact.Client) *Client {
@@ -98,9 +99,15 @@ func (c *Client) waitLogin() {
 		select {
 		case <-c.loginStopC:
 			c.SetLogging(false)
+			if c.stopLoginCall != nil {
+				c.stopLoginCall()
+			}
 			return
 		case <-timer.C:
 			c.SetLogging(false)
+			if c.stopLoginCall != nil {
+				c.stopLoginCall()
+			}
 			return
 		default:
 			status, _err := c.CheckLogin(c.uuidInfo.UUid)
@@ -310,6 +317,12 @@ func (c *Client) SetLoggedCall(f func()) *Client {
 //设置退出登陆的回调
 func (c *Client) SetLogoutCall(f func()) *Client {
 	c.logoutCall = f
+	return c
+}
+
+//设置停止登录时的回调，停止登录或者超时会调用
+func (c *Client) SetStopLoginCall(f func()) *Client {
+	c.stopLoginCall = f
 	return c
 }
 
