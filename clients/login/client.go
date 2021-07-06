@@ -48,7 +48,7 @@ func (c *Client) Login() (info *model.UUidInfo, err error) {
 	}
 	if !c.Logging() && !c.Logged() {
 		c.SetLogging(true)
-		err = c.ReLoadUUid()
+		_, err = c.ReLoadUUid()
 		info = c.uuidInfo
 		go c.waitLogin()
 	}
@@ -61,7 +61,7 @@ func (c *Client) SetTimeout(t time.Duration) *Client {
 	return c
 }
 
-func (c *Client) ReLoadUUid() (err error) {
+func (c *Client) ReLoadUUid() (info *model.UUidInfo, err error) {
 	c.uuidInfo = &model.UUidInfo{}
 	c.uuidInfo.UUid, err = c.GetUUID()
 	if err != nil {
@@ -69,9 +69,7 @@ func (c *Client) ReLoadUUid() (err error) {
 	}
 	c.uuidInfo.QrUrl = enum.QRCODE + c.uuidInfo.UUid
 	c.uuidInfo.QrImg, err = c.GetQR(c.uuidInfo.UUid)
-	if err != nil {
-		return
-	}
+	info = c.uuidInfo
 	return
 }
 
