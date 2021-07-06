@@ -1,192 +1,43 @@
 package contact
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"github.com/timerzz/itchatgo/clients/base"
-	"github.com/timerzz/itchatgo/enum"
+	"github.com/timerzz/itchatgo/api"
 	"github.com/timerzz/itchatgo/model"
-	"github.com/timerzz/itchatgo/utils"
-	"io/ioutil"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 type Client struct {
-	base        *base.Client
 	friends     map[string]*model.User
 	chatRooms   map[string]*model.User
 	contactSync sync.Mutex
+	api         *api.Api
 }
 
-func NewClient(base *base.Client) *Client {
+func NewClient(api *api.Api) *Client {
 	return &Client{
-		base:      base,
+		api:       api,
 		friends:   make(map[string]*model.User),
 		chatRooms: make(map[string]*model.User),
 	}
 }
 
-func (c *Client) GetAllContact() (contactMap map[string]*model.User, err error) {
-	if c.base == nil && !c.base.Logged() {
-		return nil, errors.New("未登录")
-	}
-	contactMap = make(map[string]*model.User)
-	var seq = 0
-	for {
-		var users []*model.User
-		users, seq, err = c.getContact(seq)
-		if err != nil {
-			return nil, err
-		}
-		for _, u := range users {
-			contactMap[u.UserName] = u
-		}
-		c.UpdateContacts(users...)
-		if seq == 0 {
-			break
-		}
-	}
-	return contactMap, nil
-}
-
-func (c *Client) getContact(seq int) (users []*model.User, reSeq int, err error) {
-	var loginInfo, httpClient = c.base.LoginInfo(), c.base.HttpClient()
-	urlMap := enum.InitParaEnum
-	urlMap[enum.PassTicket] = loginInfo.PassTicket
-	urlMap[enum.R] = fmt.Sprintf("%d", time.Now().UnixNano()/1000000)
-	urlMap["seq"] = strconv.Itoa(seq)
-	urlMap[enum.SKey] = loginInfo.BaseRequest.SKey
-
-	resp, err := httpClient.Get(loginInfo.Url+enum.GET_ALL_CONTACT_URL+utils.GetURLParams(urlMap), nil)
+func (c *Client) GetAllContacts() (contacts []*model.User, err error) {
+	contacts, err = c.api.GetAllContact()
 	if err != nil {
-		return nil, 0, err
+		return
 	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, 0, err
-	}
-	contactList := model.ContactList{}
-	err = json.Unmarshal(bodyBytes, &contactList)
-	if err != nil {
-		return nil, 0, err
-	}
-	return contactList.MemberList, seq, err
-}
-
-type contactDetailRequest struct {
-	UserName        string `json:"UserName"`
-	EncryChatRoomId string `json:"EncryChatRoomId"`
-}
-
-// GetContactDetail
-// 获取联系人详情
-// 获取群的详情主要是获取群内联系人列表
-// 主要需要Username字段
-///**/
-func (c *Client) GetContactDetail(users ...*model.User) (rsp model.ContactDetailResponse, err error) {
-	var loginInfo, httpClient = c.base.LoginInfo(), c.base.HttpClient()
-	var list = make([]contactDetailRequest, 0, len(users))
-	for _, u := range users {
-		list = append(list, contactDetailRequest{UserName: u.UserName, EncryChatRoomId: u.EncryChatRoomId})
-	}
-	urlMap := map[string]string{
-		enum.PassTicket: loginInfo.PassTicket,
-		"type":          "ex",
-		enum.R:          fmt.Sprintf("%d", time.Now().UnixNano()/1000000),
-		enum.Lang:       enum.LangValue,
-	}
-
-	params := map[string]interface{}{
-		"BaseRequest": loginInfo.BaseRequest,
-		"Count":       len(users),
-		"List":        list,
-	}
-	err = httpClient.PostJson(loginInfo.Url+enum.WEB_WX_BATCH_GET_CONTACT+utils.GetURLParams(urlMap), params, &rsp)
-	if err != nil {
-		c.UpdateContacts(rsp.ContactList...)
-	}
+	c.UpdateContacts(contacts...)
 	return
 }
 
-//如果有username而没有chatRoomUname， 就是获取用户的头像
-//如果没有username而有chatRoomUname， 就是获取群的头像
-//如果两个都有，就是获取群中某个用户的头像
-//如果有picPath, 还会把头像保存到这个路径
-func (c *Client) GetHeadImg(username, chatRoomUname, picPath string) (pic []byte, err error) {
-	var loginInfo, httpClient = c.base.LoginInfo(), c.base.HttpClient()
-	var uname = ""
-	if username != "" {
-		uname = username
-	} else if chatRoomUname != "" {
-		uname = chatRoomUname
-	} else {
-		uname = loginInfo.SelfUserName
-	}
-
-	var params = map[string]string{
-		"userName": uname,
-		"skey":     loginInfo.BaseRequest.SKey,
-		"type":     "big",
-	}
-	var url = loginInfo.Url + enum.WEB_WX_GETICON
-	if username == "" && chatRoomUname != "" {
-		url = loginInfo.Url + enum.WEB_WX_HEADIMG
-	}
-	if chatRoomUname != "" && username != "" {
-		chatRoom := c.GetChatRoomByUname(chatRoomUname)
-		if chatRoom != nil {
-			if chatRoom.EncryChatRoomId != "" {
-				params["chatroomid"] = chatRoom.EncryChatRoomId
-			} else {
-				params["chatroomid"] = chatRoomUname
-			}
-		}
-	}
-
-	rsp, err := httpClient.Get(url+utils.GetURLParams(params), nil)
+func (c *Client) GetContactDetail(contacts ...*model.User) ([]*model.User, error) {
+	rsp, err := c.api.GetContactDetail(contacts...)
 	if err != nil {
 		return nil, err
 	}
-	defer rsp.Body.Close()
-	if pic, err = ioutil.ReadAll(rsp.Body); err != nil {
-		return
-	}
-	if picPath != "" {
-		err = ioutil.WriteFile(picPath, pic, 0644)
-	}
-	return
-}
-
-func (c *Client) GetHeadImgByUser(user *model.User, picPath string) (pic []byte, err error) {
-	var httpClient = c.base.HttpClient()
-	if user == nil {
-		return nil, errors.New("user is nil")
-	}
-	if user.HeadImgUrl != "" {
-		rsp, _err := httpClient.Get("https://wx.qq.com"+user.HeadImgUrl, nil)
-		if _err != nil {
-			return nil, _err
-		}
-
-		defer rsp.Body.Close()
-		if pic, err = ioutil.ReadAll(rsp.Body); err != nil {
-			return
-		}
-		if picPath != "" {
-			err = ioutil.WriteFile(picPath, pic, 0644)
-		}
-		return
-	}
-	if user.UserName != "" {
-		return c.GetHeadImg(user.UserName, "", picPath)
-	}
-	return nil, errors.New("user has no HeadImgUrl or UserName")
+	c.UpdateContacts(rsp.ContactList...)
+	return rsp.ContactList, err
 }
 
 func (c *Client) GetUserByUname(uname string) *model.User {
@@ -290,7 +141,6 @@ func (c *Client) UpdateChatRoom(room *model.User) {
 }
 
 func (c *Client) Clear() {
-	c.base.Clear()
 	c.friends = make(map[string]*model.User)
 	c.chatRooms = make(map[string]*model.User)
 }

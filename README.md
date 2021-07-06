@@ -15,7 +15,15 @@ import(
     "github.com/timerzz/itchatgo"
 )
 ```
-[入门Demo](https://github.com/timerzz/itchatgo/blob/main/demo.go)
+[入门Demo](https://github.com/timerzz/itchatgo/blob/main/demo.go)  
+
+如果只使用api部分可以只引入api
+```go
+import(
+    "github.com/timerzz/itchatgo/api"
+)
+var api = api.NewApi()
+```
 
 ## TODO
 - [x] 登录、登出
@@ -102,8 +110,8 @@ cs.MsgCtl().Receive(msgHandler, errHandler)
 
 ### 发送消息
 ```go
-clientSet.MsgCtl().SendMsg(msg, toUserName)  //发送文字消息
-clientSet.MsgCtl().SendImage(filePath, toUserName, MediaId)  //发送图片
+clientSet.Api().SendMsg(msg, toUserName)  //发送文字消息
+clientSet.Api().SendImage(filePath, toUserName, MediaId)  //发送图片
 ```
 如果```toUserName```是""，默认会发给文件传输助手。
 
@@ -116,8 +124,8 @@ clientSet.ContactCtl().GetUserByNickName()
 
 ### 获取头像
 ```go
-clientSet.ContactCtl().GetHeadImg(userName, chatRoomName,filePath) 
-clientSet.ContactCtl().GetHeadImgByUser(User,filePath)
+clientSet.Api().GetHeadImg(userName, chatRoomName,filePath) 
+clientSet.Api().GetHeadImgByUser(User,filePath)
 ```
 获取头像提供了两个方法。  
 ```GetHeadImg```接收三个参数：userName, chatRoomUserName, filePath。  

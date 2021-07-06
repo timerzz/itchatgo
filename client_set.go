@@ -1,12 +1,10 @@
 package itchatgo
 
 import (
-	"github.com/timerzz/itchatgo/clients/base"
+	"github.com/timerzz/itchatgo/api"
 	"github.com/timerzz/itchatgo/clients/contact"
 	"github.com/timerzz/itchatgo/clients/login"
 	"github.com/timerzz/itchatgo/clients/msg"
-	"github.com/timerzz/itchatgo/enum"
-	"github.com/timerzz/itchatgo/http_client"
 	"github.com/timerzz/itchatgo/model"
 )
 
@@ -14,17 +12,18 @@ type ClientSet struct {
 	msgCtl     *msg.Client
 	loginCtl   *login.Client
 	contactCtl *contact.Client
-	base       *base.Client
+	api        *api.Api
 }
 
 func NewClientSet() *ClientSet {
-	baseClt := base.NewClient(http_client.NewHttpClient(enum.DefaultHeader), &model.LoginMap{})
 	cs := &ClientSet{
-		msgCtl:     msg.NewClient(baseClt),
-		contactCtl: contact.NewClient(baseClt),
-		base:       baseClt,
+		api: api.NewApi(),
 	}
-	cs.loginCtl = login.NewClient(baseClt, cs.contactCtl)
+	cs.contactCtl = contact.NewClient(cs.api)
+	cs.loginCtl = login.NewClient(cs.api, cs.contactCtl)
+	cs.msgCtl = msg.NewClient(cs.api, func() {
+		cs.LoginCtl().SetLogged(false)
+	})
 	return cs
 }
 
@@ -38,6 +37,10 @@ func (cs *ClientSet) MsgCtl() *msg.Client {
 
 func (cs *ClientSet) ContactCtl() *contact.Client {
 	return cs.contactCtl
+}
+
+func (cs *ClientSet) Api() *api.Api {
+	return cs.api
 }
 
 func (cs *ClientSet) Self() (u *model.User) {
