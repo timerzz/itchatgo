@@ -131,7 +131,7 @@ func (a *Api) GetHeadImgByUser(user *model.User, picPath string) (pic []byte, er
 		return nil, errors.New("user is nil")
 	}
 	if user.HeadImgUrl != "" {
-		rsp, _err := a.httpClient.Get("https://wx.qq.com"+user.HeadImgUrl, nil)
+		rsp, _err := a.httpClient.Get(a.loginInfo.Url+user.HeadImgUrl, nil)
 		if _err != nil {
 			return nil, _err
 		}
