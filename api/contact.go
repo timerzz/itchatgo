@@ -9,6 +9,7 @@ import (
 	"github.com/timerzz/itchatgo/utils"
 	"io/ioutil"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -130,23 +131,16 @@ func (a *Api) GetHeadImgByUser(user *model.User, picPath string) (pic []byte, er
 	if user == nil {
 		return nil, errors.New("user is nil")
 	}
-	if user.HeadImgUrl != "" {
-		rsp, _err := a.httpClient.Get(a.loginInfo.Url+user.HeadImgUrl, nil)
-		if _err != nil {
-			return nil, _err
-		}
-
-		defer rsp.Body.Close()
-		if pic, err = ioutil.ReadAll(rsp.Body); err != nil {
-			return
-		}
-		if picPath != "" {
-			err = ioutil.WriteFile(picPath, pic, 0644)
-		}
-		return
-	}
+	var uname, chatUname string
 	if user.UserName != "" {
-		return a.GetHeadImg(user.UserName, "", picPath)
+		if strings.HasPrefix(user.UserName, "@@") {
+			chatUname = user.UserName
+		} else if strings.HasPrefix(user.UserName, "@") {
+			uname = user.UserName
+		}
 	}
-	return nil, errors.New("user has no HeadImgUrl or UserName")
+	if uname != "" || chatUname != "" {
+		return a.GetHeadImg(uname, chatUname, picPath)
+	}
+	return nil, errors.New("user has no  UserName")
 }
