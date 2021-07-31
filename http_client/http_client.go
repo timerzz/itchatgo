@@ -25,6 +25,7 @@ func (c *Client) Get(url string, header *http.Header) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	req.Close = true
 	if header != nil {
 		req.Header = *header
 	} else {
@@ -38,6 +39,7 @@ func (c *Client) Post(url string, body io.Reader, header *http.Header) (*http.Re
 	if err != nil {
 		return nil, err
 	}
+	req.Close = true
 	if header != nil {
 		req.Header = *header
 	} else {
@@ -51,7 +53,7 @@ func (c *Client) PostJson(url string, params, response interface{}) error {
 	if err != nil {
 		return err
 	}
-	res, err := http.Post(url, enum.JSON_HEADER, bytes.NewReader(body))
+	res, err := c.Client.Post(url, enum.JSON_HEADER, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
