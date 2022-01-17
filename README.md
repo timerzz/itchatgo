@@ -1,5 +1,5 @@
 # itchatgo
-
+# ！注意，这个方法已经无法使用！大概2022/1/1左右，微信把uos的接口也封了
 itchatgo受到[itchat](https://github.com/littlecodersh/ItChat) 项目的启发，可以通过golang处理微信信息。  
 
 itchatgo参考UOS版本微信，绕过了微信的登录限制。 
